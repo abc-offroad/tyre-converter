@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>타이어 사이즈 변환기</title>
+<style>
+:root{--bg:#f5f5f2;--card:#fff;--tx:#1c1c1a;--mu:#6b6b66;--ac:#c2410c;--bd:#e2e2dc;--ok:#15803d;--warn:#b45309;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#161615;--card:#222220;--tx:#f0f0ec;--mu:#9a9a94;--ac:#fb923c;--bd:#38382f;--ok:#4ade80;--warn:#fbbf24}}
+:root[data-theme="dark"]{--bg:#161615;--card:#222220;--tx:#f0f0ec;--mu:#9a9a94;--ac:#fb923c;--bd:#38382f;--ok:#4ade80;--warn:#fbbf24}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font-family:-apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;padding:16px;max-width:520px;margin-inline:auto}
+h1{font-size:20px;margin:4px 0 2px}
+p.s{color:var(--mu);font-size:13px;margin:0 0 14px}
+label{display:block;font-size:12px;color:var(--mu);margin:12px 0 4px}
+input{width:100%;font-size:18px;padding:12px;border:1px solid var(--bd);border-radius:10px;background:var(--card);color:var(--tx)}
+input:focus{outline:2px solid var(--ac)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chip{font-size:12px;padding:6px 10px;border:1px solid var(--bd);border-radius:20px;background:var(--card);color:var(--tx);cursor:pointer}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px;margin-top:14px}
+.card h2{font-size:13px;color:var(--mu);margin:0 0 8px;font-weight:600}
+.big{font-size:22px;font-weight:700;color:var(--ac)}
+.row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bd);font-size:14px}
+.row:last-child{border:0}
+.row span:first-child{color:var(--mu)}
+.err{color:var(--warn);font-size:13px;margin-top:8px}
+.ok{color:var(--ok)}.warn{color:var(--warn)}
+.note{font-size:11px;color:var(--mu);margin-top:14px;line-height:1.5}
+</style>
+</head>
+<body>
+<h1>타이어 사이즈 변환기</h1>
+<p class="s">미터법(285/75R16)과 인치표기(33x12.50R17)를 자동 인식해 서로 변환해요.</p>
+
+<label for="a">타이어 사이즈</label>
+<input id="a" placeholder="예: 285/75R16 또는 35x12.50R17" autocapitalize="characters" autocomplete="off">
+<div class="chips" id="chips"></div>
+
+<label for="b">비교할 기존 사이즈 (선택)</label>
+<input id="b" placeholder="예: 265/70R17" autocapitalize="characters" autocomplete="off">
+
+<div id="out"></div>
+<p class="note">인치 표기는 제조사마다 폭이 다를 수 있어 가장 가까운 규격으로 환산한 값이에요. 실제 외경은 림 폭과 제조사에 따라 1~2% 차이가 날 수 있어요.</p>
+
+<script>
+const $=id=>document.getElementById(id);
+const MW=[205,215,225,235,245,255,265,275,285,295,305,315,325,335,345,355];
+function parse(s){
+  s=(s||'').toUpperCase().replace(/\s/g,'').replace(/^(LT|P)/,'').replace(/[×*]/g,'X');
+  let m=s.match(/^(\d{3})\/(\d{2})Z?R?(\d{2})/);
+  if(m){const w=+m[1],ar=+m[2],rim=+m[3];return{t:'m',w,ar,rim,D:rim*25.4+2*w*ar/100,label:`${w}/${ar}R${rim}`}}
+  m=s.match(/^(\d{2}(?:\.\d+)?)X(\d{1,2}(?:\.\d+)?)R?(\d{2})/);
+  if(m){const D=+m[1]*25.4,W=+m[2],rim=+m[3];return{t:'i',Din:+m[1],W,rim,D,label:`${m[1]}x${W.toFixed(2)}R${rim}`}}
+  return null;
+}
+function toInch(p){const W=Math.round(p.w/25.4-.5)+.5;return`${Math.round(p.D/25.4)}x${W.toFixed(2)}R${p.rim}`}
+function toMetric(p){
+  const wmm=p.W*25.4;
+  let w=MW.reduce((a,b)=>Math.abs(b-wmm)<Math.abs(a-wmm)?b:a);
+  const ar=Math.max(25,Math.min(85,Math.round(((p.D-p.rim*25.4)/2/w*100)/5)*5));
+  const D=p.rim*25.4+2*w*ar/100;
+  return{label:`${w}/${ar}R${p.rim}`,D};
+}
+const f=(n,d=0)=>n.toFixed(d);
+function row(a,b){return`<div class="row"><span>${a}</span><span>${b}</span></div>`}
+function render(){
+  const out=$('out'),pa=parse($('a').value);
+  if(!$('a').value.trim()){out.innerHTML='';return}
+  if(!pa){out.innerHTML='<div class="err">사이즈를 인식하지 못했어요. 285/75R16 또는 33x12.50R17 형식으로 입력해 주세요.</div>';return}
+  let w,sw,conv,convLabel,Dx=pa.D;
+  if(pa.t==='m'){w=pa.w;sw=pa.w*pa.ar/100;convLabel='인치 환산';conv=toInch(pa)}
+  else{const m=toMetric(pa);w=pa.W*25.4;sw=(pa.D-pa.rim*25.4)/2;convLabel='미터법 환산';conv=`${m.label} <small>(외경 ${f(m.D/25.4,1)}in)</small>`}
+  let h=`<div class="card"><h2>${convLabel}</h2><div class="big">${conv}</div></div>
+  <div class="card"><h2>${pa.label} 치수</h2>
+  ${row('외경',`${f(pa.D)}mm / ${f(pa.D/25.4,1)}in`)}
+  ${row('단면폭',`${f(w)}mm / ${f(w/25.4,1)}in`)}
+  ${row('사이드월 높이',`${f(sw)}mm / ${f(sw/25.4,1)}in`)}
+  ${row('림 직경',`${pa.rim}in`)}
+  ${row('둘레',`${f(Math.PI*pa.D)}mm`)}</div>`;
+  const bv=$('b').value.trim();
+  if(bv){
+    const pb=parse(bv);
+    if(!pb)h+='<div class="err">비교 사이즈를 인식하지 못했어요.</div>';
+    else{
+      const dd=pa.D-pb.D,pc=dd/pb.D*100,act=100*pa.D/pb.D;
+      const cls=Math.abs(pc)<=3?'ok':'warn';
+      h+=`<div class="card"><h2>${pb.label} 대비</h2>
+      ${row('외경 차이',`<b class="${cls}">${dd>=0?'+':''}${f(dd,1)}mm (${pc>=0?'+':''}${f(pc,1)}%)</b>`)}
+      ${row('지상고 변화',`${dd>=0?'+':''}${f(dd/2,1)}mm`)}
+      ${row('계기판 100km/h 시',`실제 ${f(act,1)}km/h`)}
+      ${row('판정',Math.abs(pc)<=3?'<span class="ok">허용 범위(±3%) 내</span>':'<span class="warn">±3% 초과, 계기판 보정 권장</span>')}</div>`;
+    }
+  }
+  out.innerHTML=h;
+}
+['285/75R16','315/70R17','33x12.50R17','35x12.50R17','37x12.50R17','285/70R17'].forEach(s=>{
+  const c=document.createElement('button');c.className='chip';c.textContent=s;
+  c.onclick=()=>{$('a').value=s;render()};$('chips').appendChild(c)});
+$('a').addEventListener('input',render);$('b').addEventListener('input',render);
+</script>
+</body>
+</html>
